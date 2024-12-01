@@ -22,11 +22,16 @@ class _HomePageState extends State<HomePage> {
   String? selectedPublisher;
   double minPrice = 0;
   double maxPrice = 1000;
+  bool isSearchActive = false;
+  final TextEditingController _minPriceController = TextEditingController();
+  final TextEditingController _maxPriceController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _fetchProducts();
+    _minPriceController.text = minPrice.toString();
+    _maxPriceController.text = maxPrice.toString();
   }
 
   Future<void> _fetchProducts() async {
@@ -46,29 +51,39 @@ class _HomePageState extends State<HomePage> {
   }
 
   // Обновление списка товаров на основе поискового запроса, сортировки и фильтров
-  void _updateFilteredItems() {
-    setState(() {
-      filteredItems = productItems.where((item) {
-        final titleMatch = item.title.toLowerCase().contains(searchQuery.toLowerCase());
-        final descriptionMatch = item.description.toLowerCase().contains(searchQuery.toLowerCase());
-        final priceMatch = double.parse(item.price.replaceAll(' рублей', '')) >= minPrice && double.parse(item.price.replaceAll(' рублей', '')) <= maxPrice;
-        final publisherMatch = selectedPublisher == null || item.publisher == selectedPublisher;
-        return (titleMatch || descriptionMatch) && priceMatch && publisherMatch;
-      }).toList();
+void _updateFilteredItems() {
+  setState(() {
+    // Фильтрация по заданным условиям
+    filteredItems = productItems.where((item) {
+      final titleMatch = item.title.toLowerCase().contains(searchQuery.toLowerCase());
+      final descriptionMatch = item.description.toLowerCase().contains(searchQuery.toLowerCase());
+      final priceMatch = double.parse(item.price.replaceAll(' рублей', '')) >= minPrice &&
+          double.parse(item.price.replaceAll(' рублей', '')) <= maxPrice;
+      final publisherMatch = selectedPublisher == null || item.publisher == selectedPublisher;
 
-      // Сортировка
+      // Условие фильтрации
+      return (titleMatch || descriptionMatch) && priceMatch && publisherMatch;
+    }).toList();
+
+    // Применение сортировки
+    if (sortBy == 'title') {
+      // Сортировка по названию
       filteredItems.sort((a, b) {
-        if (sortBy == 'title') {
-          return sortOrder == 'asc' ? a.title.compareTo(b.title) : b.title.compareTo(a.title);
-        } else if (sortBy == 'price') {
-          final priceA = double.parse(a.price.replaceAll(' рублей', ''));
-          final priceB = double.parse(b.price.replaceAll(' рублей', ''));
-          return sortOrder == 'asc' ? priceA.compareTo(priceB) : priceB.compareTo(priceA);
-        }
-        return 0;
+        return sortOrder == 'asc'
+            ? a.title.toLowerCase().compareTo(b.title.toLowerCase())
+            : b.title.toLowerCase().compareTo(a.title.toLowerCase());
       });
-    });
-  }
+    } else if (sortBy == 'price') {
+      // Сортировка по цене
+      filteredItems.sort((a, b) {
+        final priceA = double.parse(a.price.replaceAll(' рублей', ''));
+        final priceB = double.parse(b.price.replaceAll(' рублей', ''));
+        return sortOrder == 'asc' ? priceA.compareTo(priceB) : priceB.compareTo(priceA);
+      });
+    }
+  });
+}
+
 
   // Обновление поискового запроса
   void _onSearchQueryChanged(String query) {
@@ -159,84 +174,87 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth < 600;
-    final favoriteProvider = Provider.of<FavoriteProvider>(context);
-    final cartProvider = Provider.of<CartProvider>(context); // Добавляем CartProvider
+@override
+Widget build(BuildContext context) {
+  final screenWidth = MediaQuery.of(context).size.width;
+  final isMobile = screenWidth < 600;
+  final favoriteProvider = Provider.of<FavoriteProvider>(context);
+  final cartProvider = Provider.of<CartProvider>(context); // Добавляем CartProvider
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF191919),
-      body: isLoading
-          ? Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                children: [
-                  _buildHeader(context, isMobile),
-                  const SizedBox(height: 20),
-                  _buildSearchBar(),
-                  const SizedBox(height: 10),
-                  _buildSortAndFilterBar(),
-                  const SizedBox(height: 20),
-                  Expanded(
-                    child: GridView.builder(
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: isMobile ? 1 : 2, // Один столбец на мобильных устройствах, два на десктопах
-                        childAspectRatio: isMobile ? 1.6 : 2.3, // Соотношение ширины и высоты
-                        crossAxisSpacing: 20, // Расстояние между столбцами
-                        mainAxisSpacing: 10, // Расстояние между строками
-                      ),
-                      itemCount: filteredItems.length,
-                      itemBuilder: (context, index) {
-                        final productItem = filteredItems[index];
-                        return _buildMangaCard(context, productItem, index, favoriteProvider, cartProvider);
-                      },
+  return Scaffold(
+    backgroundColor: const Color(0xFF191919),
+    body: isLoading
+        ? Center(child: CircularProgressIndicator())
+        : Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              children: [
+                _buildHeader(context, isMobile),
+                if (isSearchActive) _buildSearchBar(),
+                const SizedBox(height: 10),
+                _buildSortAndFilterBar(),
+                const SizedBox(height: 20),
+                Expanded(
+                  child: GridView.builder(
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: isMobile ? 1 : 2, // Один столбец на мобильных устройствах, два на десктопах
+                      childAspectRatio: isMobile ? 1.6 : 2.3, // Соотношение ширины и высоты
+                      crossAxisSpacing: 20, // Расстояние между столбцами
+                      mainAxisSpacing: 10, // Расстояние между строками
                     ),
+                    itemCount: filteredItems.length,
+                    itemBuilder: (context, index) {
+                      final productItem = filteredItems[index];
+                      return _buildMangaCard(context, productItem, index, favoriteProvider, cartProvider);
+                    },
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-    );
-  }
+          ),
+  );
+}
 
   // Шапка страницы
-  Widget _buildHeader(BuildContext context, bool isMobile) {
-    return Align(
-      alignment: Alignment.topCenter,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            'MANgo100',
-            style: TextStyle(
-              fontSize: isMobile ? 30.0 : 40.0,
-              color: const Color(0xFFECDBBA),
-              fontFamily: 'Tektur',
-            ),
+Widget _buildHeader(BuildContext context, bool isMobile) {
+  return Row(
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+      GestureDetector(
+        onTap: () {
+          setState(() {
+            isSearchActive = !isSearchActive;
+          });
+        },
+        child: Text(
+          'MANgo100',
+          style: TextStyle(
+            fontSize: isMobile ? 30.0 : 40.0,
+            color: const Color(0xFFECDBBA),
+            fontFamily: 'Tektur',
           ),
-          const SizedBox(width: 10),
-          GestureDetector(
-            onTap: () => _navigateToAddProductScreen(context),
-            child: Container(
-              width: isMobile ? 24.0 : 40.0,
-              height: isMobile ? 24.0 : 40.0,
-              decoration: BoxDecoration(
-                color: const Color(0xFFC84B31),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                Icons.add,
-                color: const Color(0xFFECDBBA),
-                size: 20,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
-    );
-  }
+      if (!isSearchActive)
+        GestureDetector(
+          onTap: () => _navigateToAddProductScreen(context),
+          child: Container(
+            width: isMobile ? 24.0 : 40.0,
+            height: isMobile ? 24.0 : 40.0,
+            decoration: BoxDecoration(
+              color: const Color(0xFFC84B31),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              Icons.add,
+              color: const Color(0xFFECDBBA),
+              size: 20,
+            ),
+          ),
+        ),
+    ],
+  );
+}
 
   // Виджет для поисковой строки
   Widget _buildSearchBar() {
@@ -266,125 +284,165 @@ class _HomePageState extends State<HomePage> {
   }
 
   // Виджет для сортировки и фильтрации
-  Widget _buildSortAndFilterBar() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        DropdownButton<String>(
-          value: sortBy,
-          onChanged: (String? newValue) {
-            if (newValue != null) {
-              _onSortChanged(newValue, sortOrder);
-            }
-          },
-          items: <String>['title', 'price'].map<DropdownMenuItem<String>>((String value) {
-            return DropdownMenuItem<String>(
-              value: value,
-              child: Text(
-                value == 'title' ? 'По алфавиту' : 'По цене',
-                style: TextStyle(color: const Color(0xFFECDBBA)),
-              ),
-            );
-          }).toList(),
-          dropdownColor: const Color(0xFF2D4263),
-          style: TextStyle(color: const Color(0xFFECDBBA)),
-          icon: Icon(Icons.arrow_drop_down, color: const Color(0xFFECDBBA)),
-          underline: Container(height: 1, color: const Color(0xFFECDBBA)),
-        ),
-        DropdownButton<String>(
-          value: sortOrder,
-          onChanged: (String? newValue) {
-            if (newValue != null) {
-              _onSortChanged(sortBy, newValue);
-            }
-          },
-          items: <String>['asc', 'desc'].map<DropdownMenuItem<String>>((String value) {
-            return DropdownMenuItem<String>(
-              value: value,
-              child: Text(
-                value == 'asc' ? 'От а до я' : 'От я до а',
-                style: TextStyle(color: const Color(0xFFECDBBA)),
-              ),
-            );
-          }).toList(),
-          dropdownColor: const Color(0xFF2D4263),
-          style: TextStyle(color: const Color(0xFFECDBBA)),
-          icon: Icon(Icons.arrow_drop_down, color: const Color(0xFFECDBBA)),
-          underline: Container(height: 1, color: const Color(0xFFECDBBA)),
-        ),
-        DropdownButton<String>(
-          value: selectedPublisher,
-          onChanged: (String? newValue) {
-            _onFilterChanged(newValue, minPrice, maxPrice);
-          },
-          items: <String>['Терлецки комикс', 'Другое'].map<DropdownMenuItem<String>>((String value) {
-            return DropdownMenuItem<String>(
-              value: value,
-              child: Text(
-                value,
-                style: TextStyle(color: const Color(0xFFECDBBA)),
-              ),
-            );
-          }).toList(),
-          dropdownColor: const Color(0xFF2D4263),
-          style: TextStyle(color: const Color(0xFFECDBBA)),
-          icon: Icon(Icons.arrow_drop_down, color: const Color(0xFFECDBBA)),
-          underline: Container(height: 1, color: const Color(0xFFECDBBA)),
-        ),
-        Row(
-          children: [
-            Text('Цена от:', style: TextStyle(color: const Color(0xFFECDBBA))),
-            SizedBox(width: 10),
-            DropdownButton<double>(
-              value: minPrice,
-              onChanged: (double? newValue) {
-                if (newValue != null) {
-                  _onFilterChanged(selectedPublisher, newValue, maxPrice);
-                }
-              },
-              items: <double>[0, 100, 200, 300, 400, 500].map<DropdownMenuItem<double>>((double value) {
-                return DropdownMenuItem<double>(
-                  value: value,
-                  child: Text(
-                    '$value',
-                    style: TextStyle(color: const Color(0xFFECDBBA)),
-                  ),
-                );
-              }).toList(),
-              dropdownColor: const Color(0xFF2D4263),
+Widget _buildSortAndFilterBar() {
+  return Row(
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    children: [
+      DropdownButton<String>(
+        value: sortBy,
+        onChanged: (String? newValue) {
+          if (newValue != null) {
+            _onSortChanged(newValue, sortOrder);
+          }
+        },
+        items: <String>['title', 'price'].map<DropdownMenuItem<String>>((String value) {
+          return DropdownMenuItem<String>(
+            value: value,
+            child: Text(
+              value == 'title' ? 'По алфавиту' : 'По цене',
               style: TextStyle(color: const Color(0xFFECDBBA)),
-              icon: Icon(Icons.arrow_drop_down, color: const Color(0xFFECDBBA)),
-              underline: Container(height: 1, color: const Color(0xFFECDBBA)),
             ),
-            SizedBox(width: 10),
-            Text('до:', style: TextStyle(color: const Color(0xFFECDBBA))),
-            SizedBox(width: 10),
-            DropdownButton<double>(
-              value: maxPrice,
-              onChanged: (double? newValue) {
-                if (newValue != null) {
-                  _onFilterChanged(selectedPublisher, minPrice, newValue);
-                }
-              },
-              items: <double>[100, 200, 300, 400, 500, 1000].map<DropdownMenuItem<double>>((double value) {
-                return DropdownMenuItem<double>(
-                  value: value,
-                  child: Text(
-                    '$value',
-                    style: TextStyle(color: const Color(0xFFECDBBA)),
-                  ),
-                );
-              }).toList(),
-              dropdownColor: const Color(0xFF2D4263),
+          );
+        }).toList(),
+        dropdownColor: const Color(0xFF2D4263),
+        style: TextStyle(color: const Color(0xFFECDBBA)),
+        icon: Icon(Icons.arrow_drop_down, color: const Color(0xFFECDBBA)),
+        underline: Container(height: 1, color: const Color(0xFFECDBBA)),
+      ),
+      DropdownButton<String>(
+        value: sortOrder,
+        onChanged: (String? newValue) {
+          if (newValue != null) {
+            _onSortChanged(sortBy, newValue);
+          }
+        },
+        items: <String>['asc', 'desc'].map<DropdownMenuItem<String>>((String value) {
+          return DropdownMenuItem<String>(
+            value: value,
+            child: Text(
+              value == 'asc' ? 'От а до я' : 'От я до а',
               style: TextStyle(color: const Color(0xFFECDBBA)),
-              icon: Icon(Icons.arrow_drop_down, color: const Color(0xFFECDBBA)),
-              underline: Container(height: 1, color: const Color(0xFFECDBBA)),
             ),
-          ],
+          );
+        }).toList(),
+        dropdownColor: const Color(0xFF2D4263),
+        style: TextStyle(color: const Color(0xFFECDBBA)),
+        icon: Icon(Icons.arrow_drop_down, color: const Color(0xFFECDBBA)),
+        underline: Container(height: 1, color: const Color(0xFFECDBBA)),
+      ),
+      DropdownButton<String>(
+        value: sortOrder,
+        onChanged: (String? newValue) {
+          if (newValue != null) {
+            _onSortChanged(sortBy, newValue);
+          }
+        },
+        items: <String>['asc', 'desc'].map<DropdownMenuItem<String>>((String value) {
+          return DropdownMenuItem<String>(
+            value: value,
+            child: Text(
+              value == 'asc' ? 'От дешевых к дорогим' : 'От дорогих к дешевым',
+              style: TextStyle(color: const Color(0xFFECDBBA)),
+            ),
+          );
+        }).toList(),
+        dropdownColor: const Color(0xFF2D4263),
+        style: TextStyle(color: const Color(0xFFECDBBA)),
+        icon: Icon(Icons.arrow_drop_down, color: const Color(0xFFECDBBA)),
+        underline: Container(height: 1, color: const Color(0xFFECDBBA)),
+      ),
+      DropdownButton<String>(
+        value: selectedPublisher ?? 'Терлецки комикс',
+        onChanged: (String? newValue) {
+          _onFilterChanged(newValue, minPrice, maxPrice);
+        },
+        items: <String>['Терлецки комикс', 'Другое'].map<DropdownMenuItem<String>>((String value) {
+          return DropdownMenuItem<String>(
+            value: value,
+            child: Text(
+              value,
+              style: TextStyle(color: const Color(0xFFECDBBA)),
+            ),
+          );
+        }).toList(),
+        dropdownColor: const Color(0xFF2D4263),
+        style: TextStyle(color: const Color(0xFFECDBBA)),
+        icon: Icon(Icons.arrow_drop_down, color: const Color(0xFFECDBBA)),
+        underline: Container(height: 1, color: const Color(0xFFECDBBA)),
+      ),
+      Row(
+        children: [
+          Text('Цена от:', style: TextStyle(color: const Color(0xFFECDBBA))),
+          SizedBox(width: 10),
+          _buildPriceTextField(
+            controller: _minPriceController,
+            onChanged: (value) {
+              _onFilterChanged(selectedPublisher, double.tryParse(value) ?? 0, maxPrice);
+            },
+          ),
+          SizedBox(width: 10),
+          Text('до:', style: TextStyle(color: const Color(0xFFECDBBA))),
+          SizedBox(width: 10),
+          _buildPriceTextField(
+            controller: _maxPriceController,
+            onChanged: (value) {
+              _onFilterChanged(selectedPublisher, minPrice, double.tryParse(value) ?? 1000);
+            },
+          ),
+        ],
+      ),
+    ],
+  );
+}
+
+  // Общий стиль для DropdownButton
+ Widget _buildDropdownButton<T>({
+  required T value,
+  required ValueChanged<T?> onChanged,
+  required List<DropdownMenuItem<T>> items,
+}) {
+  return DropdownButton<T>(
+    value: value,
+    onChanged: onChanged,
+    items: items,
+    dropdownColor: const Color(0xFF2D4263),
+    style: TextStyle(color: const Color(0xFFECDBBA)),
+    icon: Icon(Icons.arrow_drop_down, color: const Color(0xFFECDBBA)),
+    underline: Container(height: 1, color: const Color(0xFFECDBBA)),
+  );
+}
+
+  // Общий стиль для TextField для цены
+  Widget _buildPriceTextField({
+  required TextEditingController controller,
+  required ValueChanged<String> onChanged,
+}) {
+  return Container(
+    width: 60,
+    child: TextField(
+      controller: controller,
+      onChanged: onChanged,
+      keyboardType: TextInputType.number,
+      decoration: InputDecoration(
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: const Color(0xFFECDBBA)),
         ),
-      ],
-    );
-  }
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: const Color(0xFFECDBBA)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: const Color(0xFFC84B31)),
+        ),
+        filled: true,
+        fillColor: const Color(0xFF2D4263),
+      ),
+      style: TextStyle(color: const Color(0xFFECDBBA)),
+    ),
+  );
+}
 
   // Карточка манги
   Widget _buildMangaCard(BuildContext context, MangaItem productItem, int index, FavoriteProvider favoriteProvider, CartProvider cartProvider) {
